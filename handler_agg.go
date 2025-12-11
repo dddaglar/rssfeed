@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,9 +27,15 @@ func scrapeFeed(s *state, nextFeed database.GetNextFeedToFetchRow) {
 	}
 	fmt.Printf("Feed Title: %s\n", feed.Channel.Title)
 	fmt.Printf("Feed Description: %s\n", feed.Channel.Description)
-	//save posts to db
+
 	for _, item := range feed.Channel.Item {
-		pubAt, _ := time.Parse(time.RFC1123Z, item.PubDate)
+		pubAt := sql.NullTime{}
+		if t, err := time.Parse(time.RFC1123Z, item.PubDate); err == nil {
+			pubAt = sql.NullTime{
+				Time:  t,
+				Valid: true,
+			}
+		}
 		_, err := s.db.CreatePost(context.Background(), database.CreatePostParams{
 			ID:          uuid.New(),
 			CreatedAt:   time.Now(),
@@ -36,10 +43,13 @@ func scrapeFeed(s *state, nextFeed database.GetNextFeedToFetchRow) {
 			Title:       item.Title,
 			Url:         item.Link,
 			Description: sql.NullString{String: item.Description, Valid: true},
-			PublishedAt: sql.NullTime{Time: pubAt, Valid: true},
-			FeedID:      uuid.NullUUID{UUID: nextFeed.ID, Valid: true},
+			PublishedAt: pubAt,
+			FeedID:      nextFeed.ID,
 		})
 		if err != nil {
+			if strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
+				continue
+			}
 			fmt.Printf("failed to create post: %v", err)
 			continue
 		}

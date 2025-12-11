@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/denizekindaglar/rssfeed/internal/database"
 	"github.com/google/uuid"
 )
 
@@ -24,16 +25,20 @@ func handlerBrowse(s *state, cmd command) error {
 	if err != nil {
 		return err
 	}
-	posts, err := s.db.GetPostsForUser(context.Background(), uuid.NullUUID{UUID: curUser.ID, Valid: true})
+	posts, err := s.db.GetPostsForUser(context.Background(), database.GetPostsForUserParams{
+		UserID: uuid.NullUUID{UUID: curUser.ID, Valid: true},
+		Limit:  int32(limit),
+	})
 	if err != nil {
-		return err
+		return fmt.Errorf("couldn't get posts for user", err)
 	}
-	if limit > len(posts) {
-		limit = len(posts)
-	}
-	fmt.Printf("here is the count of posts %v", limit)
-	for i := 0; i < limit; i++ {
-		fmt.Printf("%+v\n", posts[i])
+	fmt.Printf("Found %d posts for user %v:\n", len(posts), curUser.Name)
+	for _, post := range posts {
+		fmt.Printf("%s from %v\n", post.PublishedAt.Time.Format("Mon Jan 2"), post.FeedName)
+		fmt.Printf("--- %s ---\n", post.Title)
+		fmt.Printf("  %v\n", post.Description.String)
+		fmt.Printf("Link %s\n", post.Url)
+		fmt.Println("=========")
 	}
 	return nil
 }
